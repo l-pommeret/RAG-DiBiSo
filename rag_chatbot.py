@@ -1,12 +1,17 @@
 import os
 from langchain.prompts import PromptTemplate
 from langchain_community.llms import FakeListLLM
+try:
+    from langchain_community.llms import HuggingFacePipeline
+    HF_AVAILABLE = True
+except ImportError:
+    HF_AVAILABLE = False
 from langchain.chains.retrieval_qa.base import RetrievalQA
 import torch
 from data_processor import DataProcessor
 
 class BibliothequeRagBot:
-    def __init__(self, model_name="meta-llama/Llama-2-7b-chat-hf", vector_db_dir="vectordb"):
+    def __init__(self, model_name="fake", vector_db_dir="vectordb"):
         self.vector_db_dir = vector_db_dir
         self.model_name = model_name
         
@@ -14,14 +19,47 @@ class BibliothequeRagBot:
         self.data_processor = DataProcessor(db_dir=vector_db_dir)
         self.vectordb = self.data_processor.load_vector_db()
         
-        # Initialiser le modèle Llama
+        # Initialiser le modèle
         self.llm = self._initialize_llm()
         
         # Créer la chaîne de RAG
         self.qa_chain = self._setup_qa_chain()
     
     def _initialize_llm(self):
-        """Initialise un modèle de langage factice pour le RAG."""
+        """Initialise un modèle de langage pour le RAG."""
+        if HF_AVAILABLE and torch.cuda.is_available() and self.model_name != "fake":
+            try:
+                # Essayer d'utiliser un vrai modèle HuggingFace
+                print(f"Initializing HuggingFace model: {self.model_name}")
+                from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+                
+                # Charger le tokenizer et le modèle
+                tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+                model = AutoModelForCausalLM.from_pretrained(
+                    self.model_name,
+                    torch_dtype=torch.float16,
+                    device_map="auto"
+                )
+                
+                # Créer le pipeline
+                pipe = pipeline(
+                    "text-generation",
+                    model=model,
+                    tokenizer=tokenizer,
+                    max_new_tokens=512,
+                    temperature=0.7,
+                    top_p=0.95,
+                    repetition_penalty=1.15
+                )
+                
+                # Créer le LLM
+                llm = HuggingFacePipeline(pipeline=pipe)
+                return llm
+            except Exception as e:
+                print(f"Error initializing HuggingFace model: {e}")
+                print("Falling back to fake LLM")
+        
+        # Utiliser un LLM factice si HuggingFace n'est pas disponible ou en cas d'erreur
         print("Using fake LLM for testing purposes")
         responses = [
             "Je suis désolé, je n'ai pas d'information précise à ce sujet. Veuillez contacter directement la bibliothèque.",

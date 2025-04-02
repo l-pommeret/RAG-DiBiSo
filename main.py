@@ -41,8 +41,8 @@ def parse_args():
                        choices=['scrape', 'process', 'chat', 'web', 'all'],
                        help="Mode d'exécution: scrape, process, chat, web ou all (tous)")
     
-    parser.add_argument('--model', type=str, default='meta-llama/Llama-2-7b-chat-hf',
-                       help="Nom du modèle LLM à utiliser")
+    parser.add_argument('--model', type=str, default='fake',
+                       help="Nom du modèle LLM à utiliser (ou 'fake' pour le mode test)")
     
     parser.add_argument('--use-cuda', action='store_true',
                        help="Utiliser CUDA si disponible")
