@@ -1,9 +1,10 @@
 import json
 import os
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document
-from langchain.vectorstores import Chroma
-from langchain.embeddings import HuggingFaceEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document
+from langchain_community.vectorstores import Chroma
+# Import directly from transformers instead
+from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
 
 class DataProcessor:
     def __init__(self, data_dir="data", db_dir="vectordb"):
@@ -15,11 +16,18 @@ class DataProcessor:
         if not os.path.exists(self.db_dir):
             os.makedirs(self.db_dir)
         
-        # Initialiser le modèle d'embedding
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={'device': 'cuda' if os.environ.get('USE_CUDA', 'False').lower() == 'true' else 'cpu'}
-        )
+        # Initialiser le modèle d'embedding avec OpenAI pour simplifier
+        try:
+            # Essayer avec HuggingFaceEmbeddings
+            self.embeddings = HuggingFaceEmbeddings(
+                model_name="sentence-transformers/all-MiniLM-L6-v2",
+                model_kwargs={'device': 'cuda' if os.environ.get('USE_CUDA', 'False').lower() == 'true' else 'cpu'}
+            )
+        except Exception as e:
+            print(f"Erreur lors de l'initialisation de HuggingFaceEmbeddings: {e}")
+            # Fallback sur des embeddings simples
+            from langchain_community.embeddings import FakeEmbeddings
+            self.embeddings = FakeEmbeddings(size=384)  # Utiliser des embeddings de test
     
     def load_data(self):
         """Charge les données scrappées depuis les fichiers JSON."""

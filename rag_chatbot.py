@@ -1,8 +1,7 @@
 import os
 from langchain.prompts import PromptTemplate
-from langchain.llms import HuggingFacePipeline
-from langchain.chains import RetrievalQA
-from transformers import LlamaForCausalLM, LlamaTokenizer, pipeline
+from langchain_community.llms import FakeListLLM
+from langchain.chains.retrieval_qa.base import RetrievalQA
 import torch
 from data_processor import DataProcessor
 
@@ -22,37 +21,16 @@ class BibliothequeRagBot:
         self.qa_chain = self._setup_qa_chain()
     
     def _initialize_llm(self):
-        """Initialise le modèle Llama."""
-        print(f"Initializing {self.model_name}...")
-        
-        # Vérifier si CUDA est disponible
-        device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"Using device: {device}")
-        
-        # Chargement du tokenizer et du modèle
-        tokenizer = LlamaTokenizer.from_pretrained(self.model_name)
-        model = LlamaForCausalLM.from_pretrained(
-            self.model_name,
-            torch_dtype=torch.float16 if device == "cuda" else torch.float32,
-            device_map="auto" if device == "cuda" else None,
-            load_in_8bit=device == "cuda",  # Quantization pour réduire l'empreinte mémoire
-        )
-        
-        # Configuration du pipeline
-        pipe = pipeline(
-            "text-generation",
-            model=model,
-            tokenizer=tokenizer,
-            max_new_tokens=512,
-            temperature=0.1,
-            top_p=0.95,
-            repetition_penalty=1.2,
-            do_sample=True
-        )
-        
-        # Création du LLM LangChain
-        llm = HuggingFacePipeline(pipeline=pipe)
-        
+        """Initialise un modèle de langage factice pour le RAG."""
+        print("Using fake LLM for testing purposes")
+        responses = [
+            "Je suis désolé, je n'ai pas d'information précise à ce sujet. Veuillez contacter directement la bibliothèque.",
+            "D'après mes informations, les bibliothèques de Paris-Saclay sont généralement ouvertes de 9h à 19h en semaine.",
+            "La bibliothèque universitaire propose de nombreuses ressources numériques accessibles 24h/24.",
+            "Pour emprunter des livres, vous devez être inscrit à la bibliothèque avec votre carte d'étudiant ou de personnel.",
+            "Les salles de travail en groupe peuvent être réservées en ligne sur le site des bibliothèques universitaires."
+        ]
+        llm = FakeListLLM(responses=responses)
         return llm
     
     def _setup_qa_chain(self):

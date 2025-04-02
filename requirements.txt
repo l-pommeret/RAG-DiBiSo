@@ -3,15 +3,16 @@ requests==2.31.0
 beautifulsoup4==4.12.2
 
 # LLM et RAG
-langchain==0.0.267
-transformers==4.33.2
-torch==2.0.1
-accelerate==0.23.0
-sentence-transformers==2.2.2
-chromadb==0.4.15
+langchain>=0.0.267
+langchain-community>=0.0.20
+transformers>=4.33.2
+torch>=2.0.1
+accelerate>=0.23.0
+sentence-transformers>=2.2.2
+chromadb>=0.4.15
 
 # Interface Web
-flask==2.3.3
+flask>=2.3.3
 
 # Utilitaires
-tqdm==4.66.1
+tqdm>=4.66.1
