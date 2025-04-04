@@ -552,9 +552,9 @@ class BibliothequesScraper:
         with open(f"{self.output_dir}/all_libraries.json", 'w', encoding='utf-8') as f:
             json.dump(self.data, f, ensure_ascii=False, indent=4)
         
-        # Ensuite, crawler récursivement le site (limité à 20 pages pour éviter timeout)
+        # Ensuite, crawler récursivement le site sans limite de pages
         print("\nStarting recursive crawl of website pages...")
-        self.crawl_recursive(max_pages=20, delay_min=0.1, delay_max=0.2)
+        self.crawl_recursive(max_pages=float('inf'), delay_min=0.1, delay_max=0.2)
         
         # Sauvegarde globale de toutes les pages
         with open(f"{self.output_dir}/all_pages.json", 'w', encoding='utf-8') as f:

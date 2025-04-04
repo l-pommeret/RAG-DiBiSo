@@ -30,18 +30,23 @@ case $choice in
         echo ""
         echo "Options de scraping :"
         echo "1. Utiliser le fichier de sous-répertoires qa_haystack"
-        echo "2. Crawler le site web (20 pages max)"
-        echo "3. Tester sur une seule page"
-        read -p "Votre choix (1-3): " scrape_choice
+        echo "2. Crawler le site web (sans limite)"
+        echo "3. Crawler le site web (avec limite)"
+        echo "4. Tester sur une seule page"
+        read -p "Votre choix (1-4): " scrape_choice
         
         case $scrape_choice in
             1)
                 python setup.py scrape --subdirs qa_haystack/DiBISOData/subdirectories.txt
                 ;;
             2)
-                python setup.py scrape --max_pages 20
+                python setup.py scrape
                 ;;
             3)
+                read -p "Nombre de pages maximum à crawler: " max_pages
+                python setup.py scrape --max_pages "$max_pages"
+                ;;
+            4)
                 read -p "URL à tester: " test_url
                 python setup.py scrape --test "$test_url"
                 ;;
@@ -56,7 +61,8 @@ case $choice in
         echo "Options du système RAG :"
         echo "1. Utiliser la version simple"
         echo "2. Utiliser la version avancée"
-        read -p "Votre choix (1-2): " rag_choice
+        echo "3. Utiliser la version avancée avec reconstruction de la base vectorielle"
+        read -p "Votre choix (1-3): " rag_choice
         
         case $rag_choice in
             1)
@@ -64,6 +70,9 @@ case $choice in
                 ;;
             2)
                 python setup.py rag --advanced
+                ;;
+            3)
+                python setup.py rag --advanced --rebuild
                 ;;
             *)
                 echo "Choix invalide"

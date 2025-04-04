@@ -253,7 +253,7 @@ class SimpleBibliothequesScraper:
             start_url = self.base_url
             
         # Limiter le nombre de pages pour éviter un crawl trop long
-        if len(self.all_pages) >= max_pages:
+        if max_pages > 0 and len(self.all_pages) >= max_pages:
             print(f"Reached maximum page limit ({max_pages})")
             return
             
@@ -310,10 +310,10 @@ class SimpleBibliothequesScraper:
             print(f"Found {len(links)} links on {start_url}")
             
             # Crawl récursivement chaque lien (seulement si on n'a pas atteint la limite)
-            if len(self.all_pages) < max_pages:
+            if max_pages == 0 or len(self.all_pages) < max_pages:
                 for link in links:
                     # Arrêter si on a atteint la limite
-                    if len(self.all_pages) >= max_pages:
+                    if max_pages > 0 and len(self.all_pages) >= max_pages:
                         break
                         
                     # Pause aléatoire pour éviter de surcharger le serveur
@@ -321,7 +321,7 @@ class SimpleBibliothequesScraper:
                     time.sleep(sleep_time)
                     self.crawl_recursive(link, max_pages, delay_min, delay_max)
     
-    def scrape_all(self, max_pages=30, subdirectories_file=None):
+    def scrape_all(self, max_pages=0, subdirectories_file=None):
         """Scrape toutes les pages du site web."""
         print(f"Starting comprehensive scraping of {self.base_url}...")
         
@@ -331,8 +331,11 @@ class SimpleBibliothequesScraper:
             print(f"Scraping from subdirectories file: {subdirectories_file}")
             pages_data = self.scrape_from_subdirectories_file(subdirectories_file)
         
-        # Méthode 2: Crawler récursivement le site (limité au nombre de pages spécifié)
-        print(f"\nStarting recursive crawl of website pages (max {max_pages} pages)...")
+        # Méthode 2: Crawler récursivement le site (limité au nombre de pages spécifié si > 0)
+        if max_pages > 0:
+            print(f"\nStarting recursive crawl of website pages (max {max_pages} pages)...")
+        else:
+            print("\nStarting recursive crawl of website pages (no limit)...")
         self.crawl_recursive(max_pages=max_pages, delay_min=0.1, delay_max=0.2)
         
         # Sauvegarde globale de toutes les pages
@@ -385,7 +388,7 @@ if __name__ == "__main__":
     parser.add_argument('--subdirs', '-s', help='Fichier de sous-répertoires à scraper', type=str)
     parser.add_argument('--output', '-o', help='Répertoire de sortie', type=str, default='data')
     parser.add_argument('--txt_output', '-to', help='Répertoire de sortie pour les fichiers texte', type=str, default='txt_data')
-    parser.add_argument('--max_pages', '-m', help='Nombre maximum de pages à crawler', type=int, default=30)
+    parser.add_argument('--max_pages', '-m', help='Nombre maximum de pages à crawler (0 = sans limite)', type=int, default=0)
     
     args = parser.parse_args()
     

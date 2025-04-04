@@ -103,7 +103,7 @@ def main():
     scrape_parser = subparsers.add_parser("scrape", help="Exécuter le scraper")
     scrape_parser.add_argument("--test", help="URL pour tester l'extraction", type=str)
     scrape_parser.add_argument("--subdirs", help="Fichier de sous-répertoires à scraper", type=str)
-    scrape_parser.add_argument("--max_pages", help="Nombre maximum de pages à crawler", type=int, default=20)
+    scrape_parser.add_argument("--max_pages", help="Nombre maximum de pages à crawler", type=int, default=0)
     
     # Commande rag
     rag_parser = subparsers.add_parser("rag", help="Exécuter le système RAG")
