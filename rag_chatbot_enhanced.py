@@ -245,6 +245,8 @@ class EnhancedBibliothequeBot:
                     top_p=1,
                     n_ctx=2048,
                     verbose=False,
+                    n_gpu_layers=-1,  # Utiliser le GPU pour toutes les couches possibles
+                    n_batch=512       # Augmenter la taille du lot pour améliorer les performances GPU
                 )
                 
                 print("Modèle Llama initialisé avec succès!")
@@ -268,6 +270,28 @@ class EnhancedBibliothequeBot:
             "Les salles de travail en groupe peuvent être réservées en ligne sur le site des bibliothèques universitaires."
         ]
         return FakeListLLM(responses=responses)
+    
+    def _preprocess_query(self, query):
+        """
+        Prétraite la requête pour améliorer les résultats de recherche.
+        
+        Args:
+            query (str): La requête originale
+            
+        Returns:
+            str: La requête prétraitée
+        """
+        query_lower = query.lower()
+        
+        # Enrichissement de requêtes spécifiques
+        if "prix" in query_lower or "coût" in query_lower or "tarif" in query_lower:
+            if "impression" in query_lower or "imprime" in query_lower or "imprimer" in query_lower:
+                if "a4" in query_lower or "page" in query_lower or "feuille" in query_lower:
+                    # Requête sur les prix d'impression de page A4
+                    return f"{query} prix impression a4 photocopie"
+        
+        # Par défaut, retourner la requête inchangée
+        return query
     
     def _setup_qa_chain(self):
         """Configure la chaîne RAG pour la question-réponse."""
@@ -295,10 +319,11 @@ class EnhancedBibliothequeBot:
         
         # Configurer la chaîne de recherche et réponse
         try:
+            # Augmenter le nombre de documents récupérés pour améliorer la pertinence
             qa_chain = RetrievalQA.from_chain_type(
                 llm=self.llm,
                 chain_type="stuff",
-                retriever=self.vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 3}),
+                retriever=self.vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
                 return_source_documents=True,
                 chain_type_kwargs={"prompt": PROMPT}
             )
@@ -317,8 +342,11 @@ class EnhancedBibliothequeBot:
             return "Je suis désolé, je rencontre un problème technique. Veuillez réessayer plus tard.", []
         
         try:
+            # Prétraiter la question pour améliorer les résultats
+            processed_query = self._preprocess_query(question)
+            
             # Utiliser la chaîne RAG pour obtenir une réponse
-            result = self.qa_chain({"query": question})
+            result = self.qa_chain({"query": processed_query})
             
             if isinstance(result, dict):
                 answer = result.get("result", "")

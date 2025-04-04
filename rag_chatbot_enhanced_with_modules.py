@@ -254,29 +254,76 @@ class EnhancedBibliothequeBot:
             return llm
         
         elif self.model_name.lower() == 'llama':
-            print("Initialisation du modèle Llama...")
+            print("Initialisation du modèle Llama-3 8B...")
             
             try:
-                # Utiliser LlamaCpp pour un modèle plus léger
-                model_path = hf_hub_download(
-                    repo_id="TheBloke/Llama-2-7B-Chat-GGUF",
-                    filename="llama-2-7b-chat.Q4_K_M.gguf"
-                )
+                # Utiliser LlamaCpp avec Llama-2 (plus accessible) ou Llama-3
+                # Modèle local spécifique à l'environnement Colab
+                print("Vérification des modèles locaux...")
+                local_model_paths = [
+                    "/content/llama-2-7b-chat.Q5_K_M.gguf",  # Chemin probable dans Colab
+                    "/content/models/llama-2-7b-chat.Q5_K_M.gguf",  # Alternative
+                ]
                 
-                llm = LlamaCpp(
-                    model_path=model_path,
-                    temperature=0.1,
-                    max_tokens=2000,
-                    top_p=1,
-                    n_ctx=2048,
-                    verbose=False,
-                )
+                # Vérifier si un modèle local existe
+                model_path = None
+                for path in local_model_paths:
+                    if os.path.exists(path):
+                        model_path = path
+                        print(f"Utilisation du modèle local: {path}")
+                        break
                 
-                print("Modèle Llama initialisé avec succès!")
+                # Si pas de modèle local, essayer le téléchargement
+                if not model_path:
+                    try:
+                        # Télécharger Llama-2 qui est plus accessible sans authentification
+                        print("Téléchargement de Llama-2-7B...")
+                        model_path = hf_hub_download(
+                            repo_id="TheBloke/Llama-2-7B-Chat-GGUF",
+                            filename="llama-2-7b-chat.Q5_K_M.gguf"
+                        )
+                    except Exception as e:
+                        print(f"Téléchargement de Llama-2 échoué: {e}")
+                        raise Exception("Impossible de charger un modèle Llama")
+                
+                # Vérifier si CUDA est activé
+                use_gpu = torch.cuda.is_available() and os.environ.get('USE_CUDA', 'False').lower() == 'true'
+                n_gpu_layers = -1 if use_gpu else 0  # -1 = toutes les couches sur GPU
+                
+                # Paramètres GPU améliorés
+                llm_params = {
+                    "model_path": model_path,
+                    "temperature": 0.1,
+                    "max_tokens": 2000,
+                    "top_p": 0.95,
+                    "n_ctx": 4096,  # Contexte plus large
+                    "verbose": False,
+                    "n_threads": 4,  # Exploiter les CPU multi-cœurs
+                }
+                
+                # Ajouter les paramètres GPU spécifiques si GPU disponible
+                if use_gpu:
+                    llm_params.update({
+                        "n_gpu_layers": n_gpu_layers,
+                        "f16_kv": True,  # Utiliser float16 pour les clés/valeurs
+                        "n_batch": 512,  # Augmenter taille de batch pour GPU
+                        "use_mlock": False,  # Pas besoin de verrouiller la mémoire
+                        "use_mmap": True,  # Utiliser mmap pour charger le modèle
+                        "verbose": True,  # Activer les logs verbeux pour debug
+                        "n_ctx": 2048,  # Contexte réduit pour utiliser plus de GPU
+                        "model_kwargs": {"offload_kqv": True}  # Placer offload_kqv dans model_kwargs
+                    })
+                    print(f"Configuration GPU active: {n_gpu_layers} couches sur GPU")
+                print("Attention: pour vérifier l'utilisation réelle du GPU, exécutez nvidia-smi pendant l'inférence")
+                
+                llm = LlamaCpp(**llm_params)
+                
+                device_info = "GPU" if n_gpu_layers != 0 else "CPU"
+                print(f"Modèle Llama-3 8B initialisé avec succès sur {device_info}!")
                 return llm
                 
             except Exception as e:
-                print(f"ERREUR lors de l'initialisation de Llama: {e}")
+                print(f"ERREUR lors de l'initialisation de Llama-3: {e}")
                 return self._fallback_to_fake_llm()
         else:
             print(f"Modèle '{self.model_name}' non reconnu, utilisation du LLM factice par défaut")
@@ -293,6 +340,28 @@ class EnhancedBibliothequeBot:
             "Les salles de travail en groupe peuvent être réservées en ligne sur le site des bibliothèques universitaires."
         ]
         return FakeListLLM(responses=responses)
+    
+    def _preprocess_query(self, query):
+        """
+        Prétraite la requête pour améliorer les résultats de recherche.
+        
+        Args:
+            query (str): La requête originale
+            
+        Returns:
+            str: La requête prétraitée
+        """
+        query_lower = query.lower()
+        
+        # Enrichissement de requêtes spécifiques
+        if "prix" in query_lower or "coût" in query_lower or "tarif" in query_lower:
+            if "impression" in query_lower or "imprime" in query_lower or "imprimer" in query_lower:
+                if "a4" in query_lower or "page" in query_lower or "feuille" in query_lower:
+                    # Requête sur les prix d'impression de page A4
+                    return f"{query} prix impression a4 photocopie"
+        
+        # Par défaut, retourner la requête inchangée
+        return query
     
     def _setup_qa_chain(self):
         """Configure la chaîne RAG pour la question-réponse."""
@@ -320,10 +389,11 @@ class EnhancedBibliothequeBot:
         
         # Configurer la chaîne de recherche et réponse
         try:
+            # Augmenter le nombre de documents récupérés pour améliorer la pertinence
             qa_chain = RetrievalQA.from_chain_type(
                 llm=self.llm,
                 chain_type="stuff",
-                retriever=self.vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 3}),
+                retriever=self.vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
                 return_source_documents=True,
                 chain_type_kwargs={"prompt": PROMPT}
             )
@@ -402,8 +472,11 @@ class EnhancedBibliothequeBot:
             return "Je suis désolé, je rencontre un problème technique. Veuillez réessayer plus tard.", []
         
         try:
+            # Prétraiter la question pour améliorer les résultats
+            processed_query = self._preprocess_query(question)
+            
             # Utiliser la chaîne RAG pour obtenir une réponse
-            result = self.qa_chain({"query": question})
+            result = self.qa_chain({"query": processed_query})
             
             if isinstance(result, dict):
                 answer = result.get("result", "")
@@ -437,8 +510,18 @@ if __name__ == "__main__":
     parser.add_argument('--db', '-db', help='Répertoire de la base vectorielle', default='vectordb')
     parser.add_argument('--rebuild', '-r', help='Reconstruire la base vectorielle', action='store_true')
     parser.add_argument('--no-modules', help='Désactiver les modules spécialisés', action='store_true')
+    parser.add_argument('--use-cuda', help='Utiliser CUDA pour l\'accélération GPU', action='store_true')
     
     args = parser.parse_args()
+    
+    # Définir la variable d'environnement pour CUDA si demandé
+    if args.use_cuda:
+        if torch.cuda.is_available():
+            os.environ['USE_CUDA'] = 'True'
+            print(f"CUDA activé pour l'accélération GPU - {torch.cuda.get_device_name(0)}")
+            print(f"Mémoire GPU disponible: {torch.cuda.get_device_properties(0).total_memory / 1024 / 1024 / 1024:.2f} GB")
+        else:
+            print("WARNING: CUDA demandé mais non disponible sur ce système - utilisation du CPU")
     
     bot = EnhancedBibliothequeBot(
         model_name=args.model,

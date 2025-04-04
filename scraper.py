@@ -450,6 +450,10 @@ class BibliothequesScraper:
         excluded_extensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.doc', '.docx', '.xls', '.xlsx', '.zip', '.rar']
         if any(url.lower().endswith(ext) for ext in excluded_extensions):
             return False
+            
+        # Exclure les liens mailto: et tel:
+        if url.lower().startswith('mailto:') or url.lower().startswith('tel:'):
+            return False
         
         # Vérifier si l'URL est dans le même domaine et n'a pas déjà été visitée
         same_domain = parsed_url.netloc == parsed_base.netloc or parsed_url.netloc == ""

@@ -3,19 +3,37 @@
 Script simple pour dialoguer avec le chatbot RAG des bibliothèques Paris-Saclay.
 """
 import sys
+import os
 import argparse
-from rag_chatbot import BibliothequeRagBot
+import torch
+from rag_chatbot_enhanced_with_modules import EnhancedBibliothequeBot
 
 def main():
     # Parser des arguments
     parser = argparse.ArgumentParser(description="Chatbot des bibliothèques Paris-Saclay")
     parser.add_argument('--model', type=str, default='fake',
-                      help="Nom du modèle LLM à utiliser (fake, llama)")
+                       help="Nom du modèle LLM à utiliser (fake, llama)")
     parser.add_argument('--question', type=str, help="Question à poser en mode non-interactif")
+    parser.add_argument('--use-cuda', action='store_true', help="Utiliser CUDA pour l'accélération GPU")
+    parser.add_argument('--no-modules', action='store_true', help="Désactiver les modules spécialisés")
+    parser.add_argument('--rebuild', action='store_true', help="Reconstruire la base vectorielle")
     args = parser.parse_args()
     
+    # Définir la variable d'environnement pour CUDA si demandé
+    if args.use_cuda:
+        if torch.cuda.is_available():
+            os.environ['USE_CUDA'] = 'True'
+            print(f"CUDA activé - GPU: {torch.cuda.get_device_name(0)}")
+            print(f"Mémoire GPU: {torch.cuda.get_device_properties(0).total_memory / 1024 / 1024 / 1024:.2f} GB")
+        else:
+            print("WARNING: CUDA demandé mais non disponible - utilisation du CPU")
+    
     # Initialiser le bot
-    bot = BibliothequeRagBot(model_name=args.model)
+    bot = EnhancedBibliothequeBot(
+        model_name=args.model,
+        rebuild_vectordb=args.rebuild,
+        use_modules=not args.no_modules
+    )
     print("Bot initialisé! Posez vos questions (tapez 'quit' pour quitter).")
     
     # Mode non-interactif si une question est fournie en argument
