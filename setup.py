@@ -61,7 +61,9 @@ def run_scraper(args):
 def run_rag(args):
     """Exécute le système RAG."""
     if args.advanced and os.path.exists("rag_chatbot_enhanced.py"):
-        cmd = ["python", "rag_chatbot_enhanced.py", "--model", "llama"]
+        # Utiliser le modèle spécifié ou llama par défaut
+        model = args.model if args.model else "llama"
+        cmd = ["python", "rag_chatbot_enhanced.py", "--model", model]
         if args.rebuild:
             cmd.append("--rebuild")
     else:
@@ -109,6 +111,7 @@ def main():
     rag_parser = subparsers.add_parser("rag", help="Exécuter le système RAG")
     rag_parser.add_argument("--advanced", help="Utiliser la version avancée", action="store_true")
     rag_parser.add_argument("--rebuild", help="Reconstruire la base vectorielle", action="store_true")
+    rag_parser.add_argument("--model", help="Modèle à utiliser (fake, llama, huggingface)", default=None)
     
     # Commande web
     web_parser = subparsers.add_parser("web", help="Lancer l'interface web")

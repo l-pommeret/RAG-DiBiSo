@@ -14,6 +14,7 @@ chromadb>=0.4.15
 # Embeddings et modèles
 huggingface-hub>=0.19.0
 accelerate>=0.23.0
+llama-cpp-python>=0.2.0
 
 # NLP et traitement de texte
 nltk>=3.8.1

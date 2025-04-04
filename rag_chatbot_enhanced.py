@@ -232,28 +232,200 @@ class EnhancedBibliothequeBot:
             print("Initialisation du modèle Llama...")
             
             try:
+                # Vérifier si la bibliothèque llama-cpp-python est disponible
+                try:
+                    from langchain_community.llms import LlamaCpp
+                except ImportError:
+                    print("Impossible d'importer LlamaCpp, vérification de llama-cpp-python...")
+                    try:
+                        import llama_cpp
+                        print(f"llama-cpp-python est installé mais pas accessible via langchain: {llama_cpp.__version__}")
+                        
+                        # Tester si llama_cpp est compilé avec CUDA
+                        print("Test de la compatibilité CUDA de llama-cpp-python...")
+                        try:
+                            # Vérifier si la méthode CUBLAS_initialized existe
+                            if hasattr(llama_cpp.llama_cpp, 'CUBLAS_initialized'):
+                                print(f"Support CUBLAS détecté dans llama_cpp: {llama_cpp.llama_cpp.CUBLAS_initialized()}")
+                            else:
+                                print("Méthode CUBLAS_initialized non trouvée, la version installée pourrait ne pas supporter CUDA")
+                            
+                            # Essayer de créer un contexte Llama (devrait montrer les logs CUDA si supporté)
+                            print("Tentative de création d'un contexte Llama...")
+                            llama_params = llama_cpp.llama_context_params()
+                            llama_params.n_gpu_layers = -1  # Utiliser tous les layers GPU si disponible
+                            print("llama_cpp supporte les paramètres GPU")
+                            
+                        except Exception as e3:
+                            print(f"Erreur lors du test CUDA de llama-cpp-python: {e3}")
+                            
+                    except ImportError:
+                        print("La bibliothèque llama-cpp-python n'est pas installée")
+                        raise ImportError("Could not import llama-cpp-python. Please install it with CUDA support: CMAKE_ARGS='-DLLAMA_CUBLAS=ON' pip install llama-cpp-python")
+                
                 # Utiliser LlamaCpp pour un modèle plus léger
                 model_path = hf_hub_download(
                     repo_id="TheBloke/Llama-2-7B-Chat-GGUF",
                     filename="llama-2-7b-chat.Q4_K_M.gguf"
                 )
                 
-                llm = LlamaCpp(
-                    model_path=model_path,
-                    temperature=0.1,
-                    max_tokens=2000,
-                    top_p=1,
-                    n_ctx=2048,
-                    verbose=False,
-                    n_gpu_layers=-1,  # Utiliser le GPU pour toutes les couches possibles
-                    n_batch=512       # Augmenter la taille du lot pour améliorer les performances GPU
-                )
+                # Vérifier la disponibilité du GPU
+                gpu_available = torch.cuda.is_available()
+                print(f"GPU disponible: {gpu_available}")
+                if gpu_available:
+                    print(f"GPU utilisé: {torch.cuda.get_device_name(0)}")
+                    print(f"Mémoire GPU totale: {torch.cuda.get_device_properties(0).total_memory / 1e9:.2f} GB")
+                    print(f"Mémoire GPU utilisée: {torch.cuda.memory_allocated() / 1e9:.2f} GB")
+                
+                # Configuration tenant compte de différentes versions possibles
+                try:
+                    n_gpu_layers = -1 if gpu_available else 0
+                    llm = LlamaCpp(
+                        model_path=model_path,
+                        temperature=0.1,
+                        max_tokens=2000,
+                        top_p=1,
+                        n_ctx=2048,
+                        verbose=True,  # Activé pour voir l'utilisation du GPU
+                        n_gpu_layers=n_gpu_layers,  # Utiliser le GPU pour toutes les couches possibles si disponible
+                        n_batch=512       # Augmenter la taille du lot pour améliorer les performances GPU
+                    )
+                    print(f"Modèle Llama initialisé avec n_gpu_layers={n_gpu_layers}")
+                except TypeError as te:
+                    # Si certains paramètres ne sont pas supportés
+                    print(f"Erreur de paramètres LlamaCpp: {te}")
+                    print("Tentative avec configuration minimale...")
+                    llm = LlamaCpp(
+                        model_path=model_path,
+                        temperature=0.1,
+                        max_tokens=2000,
+                        verbose=True,
+                        n_gpu_layers=-1 if gpu_available else 0
+                    )
                 
                 print("Modèle Llama initialisé avec succès!")
                 return llm
                 
             except Exception as e:
                 print(f"ERREUR lors de l'initialisation de Llama: {e}")
+                print("Si vous utilisez Colab, essayez d'exécuter cette commande puis de relancer le script:")
+                print("!CMAKE_ARGS='-DLLAMA_CUBLAS=ON' FORCE_CMAKE=1 pip install --upgrade llama-cpp-python")
+                
+                # Tentez d'utiliser un modèle HuggingFace comme repli
+                try:
+                    print("Tentative d'utilisation d'un modèle HuggingFace comme alternative...")
+                    from transformers import pipeline
+                    from langchain.llms import HuggingFacePipeline
+                    
+                    # Essayer d'abord avec un petit modèle
+                    try:
+                        pipe = pipeline(
+                            "text-generation", 
+                            model="google/flan-t5-small", 
+                            max_length=512, 
+                            device=0 if torch.cuda.is_available() else -1
+                        )
+                        llm = HuggingFacePipeline(pipeline=pipe)
+                        print("Modèle flan-t5-small initialisé comme alternative!")
+                        return llm
+                    except Exception as e2:
+                        print(f"Erreur avec le modèle flan-t5-small: {e2}")
+                        return self._fallback_to_fake_llm()
+                    
+                except Exception as e2:
+                    print(f"Échec de l'alternative HuggingFace: {e2}")
+                    return self._fallback_to_fake_llm()
+                
+        elif self.model_name.lower() == 'huggingface':
+            print("Initialisation d'un modèle HuggingFace...")
+            try:
+                from transformers import pipeline, AutoModelForCausalLM, AutoTokenizer
+                from langchain.llms import HuggingFacePipeline
+                
+                # Utiliser un modèle compatible avec la génération de texte
+                print("Chargement d'un modèle GPT-2 français...")
+                try:
+                    # D'abord essayer avec un modèle français
+                    model_name = "bigscience/bloom-560m"  # Plus petit que flan-t5 mais compatible
+                    tokenizer = AutoTokenizer.from_pretrained(model_name)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        device_map="auto" if torch.cuda.is_available() else None,
+                        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+                    )
+                    
+                    # Configuration pour génération de texte
+                    pipe = pipeline(
+                        "text-generation", 
+                        model=model,
+                        tokenizer=tokenizer,
+                        max_length=512,
+                        do_sample=True, 
+                        temperature=0.5, 
+                        top_p=0.95
+                    )
+                except Exception as e:
+                    print(f"Erreur avec le modèle bloom: {e}")
+                    print("Tentative avec un modèle plus petit (GPT-2)...")
+                    
+                    # Fallback sur GPT-2 plus petit
+                    model_name = "gpt2"
+                    tokenizer = AutoTokenizer.from_pretrained(model_name)
+                    model = AutoModelForCausalLM.from_pretrained(
+                        model_name,
+                        device_map="auto" if torch.cuda.is_available() else None
+                    )
+                    
+                    pipe = pipeline(
+                        "text-generation", 
+                        model=model,
+                        tokenizer=tokenizer,
+                        max_length=512,
+                        do_sample=True, 
+                        temperature=0.7, 
+                        top_p=0.95
+                    )
+                
+                # Intégrer dans LangChain avec post-traitement pour améliorer la qualité
+                class EnhancedHuggingFacePipeline(HuggingFacePipeline):
+                    """Version améliorée du HuggingFacePipeline avec post-traitement des réponses."""
+                    
+                    def _call(self, prompt, stop=None, **kwargs):
+                        """Surcharge de la méthode _call pour post-traiter les résultats."""
+                        # Appeler la méthode _call de la classe parent
+                        result = super()._call(prompt, stop=stop, **kwargs)
+                        
+                        # Si le résultat commence par le prompt ou des parties du prompt, le supprimer
+                        if result.startswith(prompt):
+                            result = result[len(prompt):].strip()
+                        
+                        # Supprimer le texte "Réponse:" s'il apparaît au début
+                        if "Réponse:" in result:
+                            result = result.split("Réponse:", 1)[1].strip()
+                        
+                        # Limiter la répétition en coupant après une répétition de phrase
+                        sentences = result.split('. ')
+                        if len(sentences) > 3:
+                            # Vérifier si nous avons des répétitions
+                            unique_sentences = []
+                            for s in sentences:
+                                if s not in unique_sentences:
+                                    unique_sentences.append(s)
+                                else:
+                                    break
+                            
+                            result = '. '.join(unique_sentences[:3])
+                            if not result.endswith('.'):
+                                result += '.'
+                        
+                        return result
+                
+                # Utiliser la version améliorée
+                llm = EnhancedHuggingFacePipeline(pipeline=pipe)
+                print(f"Modèle HuggingFace {model_name} initialisé avec succès!")
+                return llm
+            except Exception as e:
+                print(f"ERREUR lors de l'initialisation du modèle HuggingFace: {e}")
                 return self._fallback_to_fake_llm()
         else:
             print(f"Modèle '{self.model_name}' non reconnu, utilisation du LLM factice par défaut")
@@ -300,7 +472,20 @@ class EnhancedBibliothequeBot:
             return None
             
         # Créer le prompt template avec les documents récupérés
-        prompt_template = """Vous êtes un assistant virtuel spécialisé dans les bibliothèques de l'Université Paris-Saclay.
+        # Adapter le prompt selon le modèle utilisé pour éviter les problèmes de génération
+        if self.model_name.lower() == 'huggingface':
+            # Prompt plus court et plus direct pour les modèles HuggingFace
+            prompt_template = """Réponds à la question sur les bibliothèques universitaires Paris-Saclay.
+Utilise uniquement le contexte suivant:
+
+{context}
+
+Question: {question}
+
+Réponse (en 3 phrases maximum):"""
+        else:
+            # Prompt original pour les autres modèles
+            prompt_template = """Vous êtes un assistant virtuel spécialisé dans les bibliothèques de l'Université Paris-Saclay.
         Utilisez les informations suivantes pour répondre à la question.
         Si vous ne connaissez pas la réponse, dites simplement que vous n'avez pas cette information et suggérez de contacter directement la bibliothèque.
         Ne fabriquez pas de réponse si l'information n'est pas présente dans le contexte fourni.
