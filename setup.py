@@ -13,7 +13,7 @@ def check_dependencies():
     """Vérifie que toutes les dépendances sont installées."""
     try:
         import requests
-        import beautifulsoup4
+        import bs4  # Correction: beautifulsoup4 s'importe sous le nom 'bs4'
         import flask
         import nltk
         return True
@@ -61,7 +61,7 @@ def run_scraper(args):
 def run_rag(args):
     """Exécute le système RAG."""
     if args.advanced and os.path.exists("rag_chatbot_enhanced.py"):
-        cmd = ["python", "rag_chatbot_enhanced.py"]
+        cmd = ["python", "rag_chatbot_enhanced.py", "--model", "llama"]
         if args.rebuild:
             cmd.append("--rebuild")
     else:
