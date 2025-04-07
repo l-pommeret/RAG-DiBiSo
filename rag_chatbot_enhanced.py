@@ -9,7 +9,10 @@ from langchain_community.vectorstores import Chroma
 from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.chains import RetrievalQA
+from langchain_community.retrievers import BM25Retriever
 import json
+import re
+from typing import List, Dict, Any, Optional
 
 class EnhancedBibliothequeBot:
     def __init__(self, model_name='fake', data_dir="data", db_dir="vectordb", rebuild_vectordb=False):
@@ -28,6 +31,12 @@ class EnhancedBibliothequeBot:
             print("Chargement de la base de données vectorielle existante...")
             self.vectordb = self._load_vectordb()
         
+        # Initialiser les documents
+        self.documents = self._load_documents()
+        
+        # Obtenir le retriever vectoriel (augmenter k pour récupérer plus de documents)
+        self.vector_retriever = self.vectordb.as_retriever(search_kwargs={"k": 10})
+        
         # Initialiser le modèle de langage
         self.llm = self._initialize_llm()
         
@@ -37,7 +46,8 @@ class EnhancedBibliothequeBot:
     def _initialize_embeddings(self):
         """Initialise le modèle d'embeddings."""
         try:
-            # Essayer avec HuggingFaceEmbeddings
+            # Utiliser le même modèle d'embeddings que celui utilisé pour créer la base vectorielle
+            # Pour éviter les erreurs de dimension
             embeddings = HuggingFaceEmbeddings(
                 model_name="sentence-transformers/all-MiniLM-L6-v2",
                 model_kwargs={'device': 'cuda' if os.environ.get('USE_CUDA', 'False').lower() == 'true' else 'cpu'}
@@ -51,13 +61,36 @@ class EnhancedBibliothequeBot:
             print("Utilisation de FakeEmbeddings pour les tests")
             return FakeEmbeddings(size=384)
     
+    def _initialize_bm25(self):
+        """Initialise le retriever BM25."""
+        if not self.documents:
+            print("Aucun document disponible pour BM25")
+            return None
+        
+        try:
+            # Préparer les documents pour BM25 (extraire le contenu)
+            texts = [doc.page_content for doc in self.documents]
+            
+            # Créer le retriever BM25
+            bm25_retriever = BM25Retriever.from_texts(texts)
+            bm25_retriever.k = 10  # Récupérer un plus grand nombre de documents
+            
+            # Associer les documents originaux
+            bm25_retriever.docs = self.documents
+            
+            print(f"Retriever BM25 initialisé avec {len(texts)} documents")
+            return bm25_retriever
+        except Exception as e:
+            print(f"Erreur lors de l'initialisation du retriever BM25: {e}")
+            return None
+    
     def _build_vectordb(self):
         """Construit la base de données vectorielle à partir des données."""
         # Créer le répertoire de base de données vectorielle s'il n'existe pas
         if not os.path.exists(self.db_dir):
             os.makedirs(self.db_dir)
         
-        # Charger les données
+        # Charger les documents
         documents = self._load_documents()
         
         if not documents:
@@ -475,6 +508,12 @@ class EnhancedBibliothequeBot:
         """
         query_lower = query.lower()
         
+        # Détection de requêtes sur les horaires
+        if any(word in query_lower for word in ["horaire", "ouvert", "ferme", "heures", "quand"]):
+            if any(word in query_lower for word in ["bibliothèque", "biblio", "bu"]):
+                # Ajouter des mots-clés spécifiques aux horaires
+                return f"{query} horaires heures ouverture fermeture"
+        
         # Enrichissement de requêtes spécifiques
         if "prix" in query_lower or "coût" in query_lower or "tarif" in query_lower:
             if "impression" in query_lower or "imprime" in query_lower or "imprimer" in query_lower:
@@ -485,10 +524,75 @@ class EnhancedBibliothequeBot:
         # Par défaut, retourner la requête inchangée
         return query
     
+    def _rerank_documents(self, docs: List[Document], query: str, top_k: int = 5) -> List[Document]:
+        """
+        Reclasse les documents récupérés en fonction de leur pertinence.
+        
+        Args:
+            docs: Liste des documents récupérés
+            query: Requête utilisateur
+            top_k: Nombre de documents à retourner
+            
+        Returns:
+            Liste des documents reclassés
+        """
+        if not docs:
+            return []
+        
+        # Extraire les mots-clés de la requête
+        keywords = re.findall(r'\w+', query.lower())
+        keywords = [k for k in keywords if len(k) > 2]  # Ignorer les mots courts
+        
+        # Calculer un score pour chaque document
+        scored_docs = []
+        
+        for doc in docs:
+            # Score initial
+            score = 0
+            content = doc.page_content.lower()
+            
+            # Nombre de mots-clés trouvés dans le document
+            for keyword in keywords:
+                count = content.count(keyword)
+                score += count * 2  # Pondération plus élevée pour les mots-clés exacts
+            
+            # Bonus pour les correspondances exactes de phrases
+            exact_phrase_bonus = 0
+            if query.lower() in content:
+                exact_phrase_bonus = 10
+            
+            # Bonus pour les titres pertinents
+            title_bonus = 0
+            if "title" in doc.metadata:
+                title = doc.metadata["title"].lower()
+                for keyword in keywords:
+                    if keyword in title:
+                        title_bonus += 5
+            
+            # Score de fraîcheur pour les horaires (hypothétique)
+            freshness_bonus = 0
+            if "source" in doc.metadata and doc.metadata["source"] == "hours":
+                freshness_bonus = 10
+            
+            # Score final
+            final_score = score + exact_phrase_bonus + title_bonus + freshness_bonus
+            
+            # Bonus spécial pour les documents qui contiennent exactement les informations demandées
+            if "horaire" in query.lower() and "horaire" in content:
+                final_score += 15
+            
+            scored_docs.append((doc, final_score))
+        
+        # Trier par score décroissant
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
+        
+        # Retourner les top_k documents
+        return [doc for doc, _ in scored_docs[:top_k]]
+    
     def _setup_qa_chain(self):
         """Configure la chaîne RAG pour la question-réponse."""
-        if not self.vectordb:
-            print("ERREUR: Base de données vectorielle non initialisée")
+        if not self.vector_retriever:
+            print("ERREUR: Retriever non initialisé")
             return None
             
         # Créer le prompt template avec les documents récupérés
@@ -524,11 +628,11 @@ Réponse (en 3 phrases maximum):"""
         
         # Configurer la chaîne de recherche et réponse
         try:
-            # Augmenter le nombre de documents récupérés pour améliorer la pertinence
+            # Utiliser le retriever vectoriel
             qa_chain = RetrievalQA.from_chain_type(
                 llm=self.llm,
                 chain_type="stuff",
-                retriever=self.vectordb.as_retriever(search_type="similarity", search_kwargs={"k": 5}),
+                retriever=self.vector_retriever,
                 return_source_documents=True,
                 chain_type_kwargs={"prompt": PROMPT}
             )
@@ -550,26 +654,53 @@ Réponse (en 3 phrases maximum):"""
             # Prétraiter la question pour améliorer les résultats
             processed_query = self._preprocess_query(question)
             
-            # Utiliser la chaîne RAG pour obtenir une réponse
-            result = self.qa_chain({"query": processed_query})
+            # Méthode hybride de recherche
+            bm25_docs = []
+            vector_docs = []
             
-            if isinstance(result, dict):
-                answer = result.get("result", "")
-                source_docs = result.get("source_documents", [])
+            # Utiliser seulement la recherche vectorielle
+            try:
+                # Utiliser la chaîne RAG pour obtenir une réponse, ce qui utilise le vector_retriever
+                result = self.qa_chain({"query": processed_query})
+                
+                if isinstance(result, dict):
+                    answer = result.get("result", "")
+                    vector_docs = result.get("source_documents", [])
+                    print(f"Recherche vectorielle a trouvé {len(vector_docs)} documents")
+                else:
+                    # Fallback si le résultat n'est pas au format attendu
+                    answer = str(result)
+                    vector_docs = []
+            except Exception as e:
+                print(f"Erreur avec la recherche vectorielle: {e}")
+                answer = "Je suis désolé, une erreur s'est produite."
+                vector_docs = []
+            
+            # Utiliser directement les documents de la recherche vectorielle
+            combined_docs = list(vector_docs)
+            
+            # 4. Reclasser les documents combinés
+            if combined_docs:
+                reranked_docs = self._rerank_documents(combined_docs, processed_query)
             else:
-                # Fallback si le résultat n'est pas au format attendu
-                answer = str(result)
-                source_docs = []
+                reranked_docs = []
             
             # Afficher les sources pour le debug
-            print("\nSources:")
-            for i, doc in enumerate(source_docs):
+            print("\nSources après reclassement:")
+            for i, doc in enumerate(reranked_docs[:5]):
                 source = doc.metadata.get('source', 'N/A')
                 title = doc.metadata.get('title', 'N/A')
                 library = doc.metadata.get('library', 'N/A')
                 print(f"Source {i+1}: {source} - {title or library}")
             
-            return answer, source_docs
+            # Si la réponse n'a pas été générée par la recherche vectorielle,
+            # recréer la réponse avec tous les documents combinés
+            if not answer and reranked_docs:
+                context = "\n\n".join([doc.page_content for doc in reranked_docs[:3]])
+                # Simplifier la réponse
+                answer = f"D'après les informations disponibles: {reranked_docs[0].page_content}"
+            
+            return answer, reranked_docs
             
         except Exception as e:
             print(f"ERREUR lors de la génération de la réponse: {e}")
