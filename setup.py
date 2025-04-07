@@ -94,6 +94,15 @@ def run_tests(args):
         print(f"Exécution du test: {test}")
         subprocess.run(cmd)
 
+def initialize_vectordb(args):
+    """Initialise la base de données vectorielle."""
+    from data_processor import DataProcessor
+    
+    print("Initialisation de la base de données vectorielle...")
+    processor = DataProcessor()
+    processor.process_data()
+    print("Base de données vectorielle initialisée avec succès!")
+
 def main():
     parser = argparse.ArgumentParser(description="Configuration et exécution de RAG-DiBiSo")
     subparsers = parser.add_subparsers(dest="command", help="Commande à exécuter")
@@ -123,6 +132,9 @@ def main():
     test_parser.add_argument("--scraper", help="Tester le scraper", action="store_true")
     test_parser.add_argument("--rag", help="Tester le système RAG", action="store_true")
     
+    # Commande initialize_vectordb
+    vectordb_parser = subparsers.add_parser("initialize_vectordb", help="Initialiser la base de données vectorielle")
+    
     args = parser.parse_args()
     
     if args.command == "setup":
@@ -140,6 +152,8 @@ def main():
         run_web(args)
     elif args.command == "test":
         run_tests(args)
+    elif args.command == "initialize_vectordb":
+        initialize_vectordb(args)
     else:
         parser.print_help()
 

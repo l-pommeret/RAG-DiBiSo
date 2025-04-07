@@ -19,11 +19,12 @@ python setup.py setup
 echo ""
 echo "Que souhaitez-vous faire ?"
 echo "1. Extraire des données (scraping)"
-echo "2. Lancer le système RAG"
-echo "3. Lancer l'interface web"
-echo "4. Exécuter les tests"
-echo "5. Quitter"
-read -p "Votre choix (1-5): " choice
+echo "2. Initialiser la base de données vectorielle"
+echo "3. Lancer le système RAG"
+echo "4. Lancer l'interface web"
+echo "5. Exécuter les tests"
+echo "6. Quitter"
+read -p "Votre choix (1-6): " choice
 
 case $choice in
     1)
@@ -57,58 +58,22 @@ case $choice in
         esac
         ;;
     2)
-        echo ""
-        echo "Options du système RAG :"
-        echo "1. Utiliser la version simple"
-        echo "2. Utiliser la version avancée avec Llama (GPU)"
-        echo "3. Utiliser la version avancée avec reconstruction de la base vectorielle"
-        echo "4. Utiliser la version avancée avec HuggingFace (alternative GPU)"
-        echo "5. Utiliser la version avancée avec modèle factice (fallback)"
-        echo "6. Installer llama-cpp-python avec support CUDA (si problème GPU)"
-        read -p "Votre choix (1-6): " rag_choice
-        
-        case $rag_choice in
-            1)
-                python setup.py rag
-                ;;
-            2)
-                # Vérification GPU avant d'utiliser Llama
-                python check_gpu.py
-                echo "Lancement de RAG avec Llama..."
-                python setup.py rag --advanced --model llama
-                ;;
-            3)
-                # Vérification GPU avant d'utiliser Llama avec reconstruction
-                python check_gpu.py
-                echo "Lancement de RAG avec Llama et reconstruction de la base vectorielle..."
-                python setup.py rag --advanced --rebuild --model llama
-                ;;
-            4)
-                # Utiliser HuggingFace comme alternative au GPU
-                echo "Lancement de RAG avec HuggingFace (utilise aussi le GPU)..."
-                python setup.py rag --advanced --model huggingface
-                ;;
-            5)
-                echo "Lancement de RAG avec un modèle factice (rapide mais limité)..."
-                python setup.py rag --advanced --model fake
-                ;;
-            6)
-                echo "Installation de llama-cpp-python avec support CUDA..."
-                ./install_llama_cpp_python.sh
-                ;;
-            *)
-                echo "Choix invalide"
-                exit 1
-                ;;
-        esac
+        echo "Initialisation de la base de données vectorielle..."
+        python setup.py initialize_vectordb
         ;;
     3)
-        python setup.py web
+        # Vérification GPU avant d'utiliser Llama
+        python check_gpu.py
+        echo "Lancement de RAG avec Llama..."
+        python setup.py rag --advanced --model llama
         ;;
     4)
-        python setup.py test --all
+        python setup.py web
         ;;
     5)
+        python setup.py test --all
+        ;;
+    6)
         echo "Au revoir !"
         exit 0
         ;;

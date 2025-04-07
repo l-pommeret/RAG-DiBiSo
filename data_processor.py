@@ -165,7 +165,14 @@ Description: {library['description']}
             embedding_function=self.embeddings
         )
 
+    def process_data(self):
+        """Process des données et création de la base vectorielle."""
+        vectordb = self.create_vector_db()
+        if vectordb:
+            print(f"Base de données vectorielle créée et sauvegardée dans le répertoire '{self.db_dir}'.")
+            return True
+        return False
+
 if __name__ == "__main__":
     processor = DataProcessor()
-    vectordb = processor.create_vector_db()
-    print(f"Vector database created and saved to '{processor.db_dir}' directory.")
+    processor.process_data()
