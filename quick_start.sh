@@ -9,7 +9,7 @@ fi
 
 # Installer les dépendances
 echo "Installation des dépendances..."
-pip install -r requirements.txt
+pip3 install -r requirements.txt
 
 # Configurer l'environnement
 echo "Configuration de l'environnement..."
