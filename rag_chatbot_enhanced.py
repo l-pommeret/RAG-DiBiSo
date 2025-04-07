@@ -227,6 +227,26 @@ class EnhancedBibliothequeBot:
             ]
             llm = FakeListLLM(responses=responses)
             return llm
+            
+        elif self.model_name.lower() == 'ollama':
+            print("Initialisation du modèle Ollama (Llama 3.1)...")
+            try:
+                from langchain_community.llms import Ollama
+                llm = Ollama(
+                    model="llama3", 
+                    temperature=0.1,
+                    num_ctx=2048
+                )
+                print("Modèle Ollama (Llama 3.1) initialisé avec succès!")
+                return llm
+            except Exception as e:
+                print(f"ERREUR lors de l'initialisation d'Ollama: {e}")
+                print("Assurez-vous qu'Ollama est installé et que le service est en cours d'exécution.")
+                print("Pour installer Ollama: https://ollama.com/download")
+                print("Pour démarrer le service: ollama serve")
+                print("Pour vérifier que Llama 3.1 est disponible: ollama list")
+                print("Pour télécharger Llama 3.1 si nécessaire: ollama pull llama3")
+                return self._fallback_to_fake_llm()
         
         elif self.model_name.lower() == 'llama':
             print("Initialisation du modèle Llama...")
@@ -560,7 +580,7 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description='Chatbot RAG pour les bibliothèques de Paris-Saclay')
-    parser.add_argument('--model', '-m', help='Modèle à utiliser (fake, llama)', default='fake')
+    parser.add_argument('--model', '-m', help='Modèle à utiliser (fake, ollama, llama, huggingface)', default='fake')
     parser.add_argument('--data', '-d', help='Répertoire des données', default='data')
     parser.add_argument('--db', '-db', help='Répertoire de la base vectorielle', default='vectordb')
     parser.add_argument('--rebuild', '-r', help='Reconstruire la base vectorielle', action='store_true')

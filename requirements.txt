@@ -8,6 +8,7 @@ langchain-core>=0.1.7
 langchain-community>=0.0.11
 langchain-text-splitters>=0.0.1
 langchain-huggingface>=0.0.1
+langchain-ollama>=0.0.1
 transformers>=4.33.2
 sentence-transformers>=2.2.2
 chromadb>=0.4.15

@@ -58,11 +58,96 @@ def run_scraper(args):
     print(f"Exécution de la commande: {' '.join(cmd)}")
     subprocess.run(cmd)
 
+def check_ollama_status():
+    """Vérifie si Ollama est installé et en cours d'exécution."""
+    try:
+        # Vérifier si Ollama est installé
+        ollama_installed = subprocess.run(["which", "ollama"], capture_output=True, text=True).returncode == 0
+        if not ollama_installed:
+            print("Ollama n'est pas installé. Veuillez l'installer depuis https://ollama.com/download")
+            return False
+        
+        # Vérifier si Ollama est en cours d'exécution
+        response = subprocess.run(["curl", "-s", "http://localhost:11434/api/version"], capture_output=True, text=True)
+        if response.returncode != 0 or not response.stdout:
+            print("Le serveur Ollama n'est pas en cours d'exécution.")
+            return False
+        
+        print("Ollama est installé et en cours d'exécution.")
+        return True
+    except Exception as e:
+        print(f"Erreur lors de la vérification d'Ollama: {e}")
+        return False
+
+def start_ollama_server():
+    """Démarre le serveur Ollama s'il n'est pas déjà en cours d'exécution."""
+    try:
+        # Vérifier si le serveur est déjà en cours d'exécution
+        response = subprocess.run(["curl", "-s", "http://localhost:11434/api/version"], capture_output=True, text=True)
+        if response.returncode == 0 and response.stdout:
+            print("Le serveur Ollama est déjà en cours d'exécution.")
+            return True
+        
+        # Démarrer le serveur en arrière-plan
+        print("Démarrage du serveur Ollama...")
+        subprocess.Popen(["ollama", "serve"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Attendre que le serveur soit prêt
+        import time
+        for _ in range(10):  # Essayer 10 fois avec 1 seconde d'attente
+            time.sleep(1)
+            response = subprocess.run(["curl", "-s", "http://localhost:11434/api/version"], capture_output=True, text=True)
+            if response.returncode == 0 and response.stdout:
+                print("Serveur Ollama démarré avec succès.")
+                return True
+        
+        print("Échec du démarrage du serveur Ollama.")
+        return False
+    except Exception as e:
+        print(f"Erreur lors du démarrage du serveur Ollama: {e}")
+        return False
+
+def check_and_pull_model(model_name):
+    """Vérifie si le modèle est déjà téléchargé, sinon le télécharge."""
+    try:
+        # Vérifier si le modèle est déjà téléchargé
+        models = subprocess.run(["ollama", "list"], capture_output=True, text=True)
+        if model_name in models.stdout:
+            print(f"Le modèle {model_name} est déjà téléchargé.")
+            return True
+        
+        # Télécharger le modèle
+        print(f"Téléchargement du modèle {model_name}...")
+        result = subprocess.run(["ollama", "pull", model_name], capture_output=True, text=True)
+        if result.returncode == 0:
+            print(f"Modèle {model_name} téléchargé avec succès.")
+            return True
+        else:
+            print(f"Échec du téléchargement du modèle {model_name}: {result.stderr}")
+            return False
+    except Exception as e:
+        print(f"Erreur lors de la vérification/téléchargement du modèle: {e}")
+        return False
+
 def run_rag(args):
     """Exécute le système RAG."""
     if args.advanced and os.path.exists("rag_chatbot_enhanced.py"):
         # Utiliser le modèle spécifié ou llama par défaut
         model = args.model if args.model else "llama"
+        
+        # Si le modèle est ollama, vérifier/démarrer Ollama et télécharger le modèle
+        if model == "ollama":
+            if not check_ollama_status():
+                print("Tentative de démarrage du serveur Ollama...")
+                if not start_ollama_server():
+                    print("Impossible de démarrer Ollama. Veuillez le démarrer manuellement avec 'ollama serve'.")
+                    return
+            
+            # Vérifier/télécharger le modèle llama3
+            if not check_and_pull_model("llama3"):
+                print("Impossible de télécharger le modèle llama3. Veuillez vérifier votre connexion internet.")
+                return
+        
         cmd = ["python", "rag_chatbot_enhanced.py", "--model", model]
         if args.rebuild:
             cmd.append("--rebuild")

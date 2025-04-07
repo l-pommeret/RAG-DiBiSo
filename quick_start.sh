@@ -11,6 +11,13 @@ fi
 echo "Installation des dépendances..."
 pip3 install -r requirements.txt
 
+# Installer Ollama si nécessaire
+if ! command -v ollama &> /dev/null; then
+    echo "Installation d'Ollama..."
+    curl -fsSL https://ollama.com/install.sh | sh
+    echo "Ollama installé avec succès!"
+fi
+
 # Configurer l'environnement
 echo "Configuration de l'environnement..."
 python setup.py setup
@@ -62,10 +69,8 @@ case $choice in
         python setup.py initialize_vectordb
         ;;
     3)
-        # Vérification GPU avant d'utiliser Llama
-        python check_gpu.py
-        echo "Lancement de RAG avec Llama..."
-        python setup.py rag --advanced --model llama
+        echo "Lancement de RAG avec Ollama (Llama 3.1)..."
+        python setup.py rag --advanced --model ollama
         ;;
     4)
         python setup.py web
