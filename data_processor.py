@@ -3,8 +3,12 @@ import os
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 from langchain_community.vectorstores import Chroma
-# Import directly from transformers instead
-from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
+# Import from the recommended package to éviter LangChainDeprecationWarning
+try:
+    from langchain_huggingface import HuggingFaceEmbeddings
+except ImportError:
+    # Fallback to legacy import if langchain_huggingface is not installed
+    from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
 
 class DataProcessor:
     def __init__(self, data_dir="data", db_dir="vectordb"):
@@ -33,89 +37,56 @@ class DataProcessor:
         """Charge les données scrappées depuis les fichiers JSON."""
         all_data = []
         
-        # Tenter de charger le fichier global d'abord
+        # Essayer de charger all_pages.json en priorité
         try:
-            with open(f"{self.data_dir}/all_libraries.json", 'r', encoding='utf-8') as f:
+            with open(f"{self.data_dir}/all_pages.json", 'r', encoding='utf-8') as f:
                 all_data = json.load(f)
-                print(f"Loaded data for {len(all_data)} libraries from global file.")
+                print(f"Loaded data from all_pages.json ({len(all_data)} pages).")
                 return all_data
-        except FileNotFoundError:
-            pass
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Couldn't load all_pages.json: {e}")
         
-        # Si le fichier global n'existe pas, charger les fichiers individuels
+        # Si all_pages.json n'existe pas ou est invalide, charger les fichiers individuels
         for filename in os.listdir(self.data_dir):
-            if filename.endswith('.json') and filename != 'all_libraries.json':
+            if filename.endswith('.json') and filename != 'all_pages.json':
                 try:
                     with open(os.path.join(self.data_dir, filename), 'r', encoding='utf-8') as f:
-                        library_data = json.load(f)
-                        all_data.append(library_data)
+                        page_data = json.load(f)
+                        all_data.append(page_data)
                 except Exception as e:
                     print(f"Error loading {filename}: {e}")
         
-        print(f"Loaded data for {len(all_data)} libraries from individual files.")
+        print(f"Loaded data from {len(all_data)} individual JSON files.")
         return all_data
     
     def create_documents(self, data):
         """Transforme les données en documents pour le traitement."""
         documents = []
         
-        for library in data:
-            # Document pour les informations générales
-            general_info = f"""
-Nom: {library['name']}
-URL: {library['url']}
-Adresse: {library['address']}
-Description: {library['description']}
+        for page in data:
+            # Créer un document par page
+            title = page.get('title', 'Sans titre')
+            url = page.get('url', '')
+            content = page.get('main_content', page.get('content', ''))
+            
+            if not content or len(content) < 10:
+                continue
+                
+            # Document pour le contenu de la page
+            page_info = f"""
+Titre: {title}
+URL: {url}
+Contenu: {content}
             """
             
             documents.append(Document(
-                page_content=general_info,
+                page_content=page_info,
                 metadata={
-                    "source": "general_info",
-                    "library": library['name']
+                    "source": "page_data",
+                    "title": title,
+                    "url": url
                 }
             ))
-            
-            # Document pour les horaires
-            if isinstance(library['hours'], str) and library['hours'] != "Horaires non disponibles":
-                documents.append(Document(
-                    page_content=f"Horaires de la bibliothèque {library['name']}: {library['hours']}",
-                    metadata={
-                        "source": "hours",
-                        "library": library['name']
-                    }
-                ))
-            
-            # Document pour les contacts
-            if isinstance(library['contact'], dict) and library['contact']:
-                contact_info = f"Contacts de la bibliothèque {library['name']}:\n"
-                
-                if 'email' in library['contact']:
-                    contact_info += f"Emails: {', '.join(library['contact']['email'])}\n"
-                
-                if 'phone' in library['contact']:
-                    contact_info += f"Téléphones: {', '.join(library['contact']['phone'])}\n"
-                
-                documents.append(Document(
-                    page_content=contact_info,
-                    metadata={
-                        "source": "contact",
-                        "library": library['name']
-                    }
-                ))
-            
-            # Document pour les services
-            if isinstance(library['services'], list) and library['services']:
-                services_info = f"Services disponibles à la bibliothèque {library['name']}:\n"
-                services_info += "\n".join([f"- {service}" for service in library['services']])
-                
-                documents.append(Document(
-                    page_content=services_info,
-                    metadata={
-                        "source": "services",
-                        "library": library['name']
-                    }
-                ))
         
         return documents
     
@@ -147,14 +118,12 @@ Description: {library['description']}
         print(f"Created {len(chunks)} document chunks from {len(documents)} original documents.")
         
         # Créer la base de données vectorielle
+        # Chroma persiste automatiquement les données depuis la version 0.4.x
         vectordb = Chroma.from_documents(
             documents=chunks,
             embedding=self.embeddings,
             persist_directory=self.db_dir
         )
-        
-        # Persister la base de données
-        vectordb.persist()
         
         return vectordb
     
