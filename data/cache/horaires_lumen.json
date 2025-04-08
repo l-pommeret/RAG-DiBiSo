@@ -1,0 +1,18 @@
+{
+  "source": "affluences_v3",
+  "library_id": "lumen",
+  "library_name": "Lumen Learning Center Paris-Saclay",
+  "horaires_details": {
+    "Mardi": "08:30:00 - 22:30:00"
+  },
+  "current_week": {
+    "Mardi": "08:30:00 - 22:30:00",
+    "Mercredi": "08:30:00 - 22:30:00",
+    "Jeudi": "08:30:00 - 22:30:00",
+    "Vendredi": "08:30:00 - 22:30:00",
+    "Samedi": "10:00:00 - 19:00:00",
+    "Dimanche": "10:00:00 - 19:00:00"
+  },
+  "url": "https://affluences.com/lumen",
+  "last_updated": "2025-04-08T09:21:47.239595"
+}

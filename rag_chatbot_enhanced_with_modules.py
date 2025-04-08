@@ -451,9 +451,13 @@ class EnhancedBibliothequeBot:
                 # Ajouter un message pour indiquer que les données sont actualisées
                 note = "\n\nNote: Ces informations sont récupérées en temps réel depuis les sources officielles."
                 
-                # Créer une source virtuelle pour les données dynamiques
+                # Préparation du contenu de la page pour utilisation dans les sources
+                content_for_source = str(answer)
+                
+                # Créer une source virtuelle avec les données dynamiques d'horaires
+                # qui inclut le contenu de la réponse pour que le LLM puisse le citer
                 source_docs = [Document(
-                    page_content="Données d'horaires récupérées en temps réel",
+                    page_content=content_for_source,
                     metadata={
                         "source": "module_horaires",
                         "title": "Horaires des bibliothèques",

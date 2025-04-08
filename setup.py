@@ -131,7 +131,21 @@ def check_and_pull_model(model_name):
 
 def run_rag(args):
     """Exécute le système RAG."""
-    if args.advanced and os.path.exists("rag_chatbot_enhanced.py"):
+    if args.advanced:
+        # Vérifier d'abord si la version avec modules existe
+        if os.path.exists("rag_chatbot_enhanced_with_modules.py"):
+            print("Utilisation de la version avec modules spécialisés")
+            rag_script = "rag_chatbot_enhanced_with_modules.py"
+        elif os.path.exists("rag_chatbot_enhanced.py"):
+            print("Utilisation de la version avancée sans modules")
+            rag_script = "rag_chatbot_enhanced.py"
+        else:
+            print("Aucune version avancée du RAG trouvée. Utilisation de la version simple.")
+            cmd = ["python", "simple_rag.py"]
+            print(f"Exécution de la commande: {' '.join(cmd)}")
+            subprocess.run(cmd)
+            return
+        
         # Utiliser le modèle spécifié ou llama par défaut
         model = args.model if args.model else "llama"
         
@@ -148,7 +162,7 @@ def run_rag(args):
                 print("Impossible de télécharger le modèle llama3. Veuillez vérifier votre connexion internet.")
                 return
         
-        cmd = ["python", "rag_chatbot_enhanced.py", "--model", model]
+        cmd = ["python", rag_script, "--model", model]
         if args.rebuild:
             cmd.append("--rebuild")
     else:
